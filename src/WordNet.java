@@ -6,23 +6,27 @@ import java.util.Map;
 
 public class WordNet {
 
-  private Digraph digraph;
-  private Map<Integer, ArrayList<String>> synsets;
-  private Map<Integer, ArrayList<Integer>> hypernyms;
-  private Map<String, Integer> nouns;
+  private final SAP sap;
+  private final Map<Integer, String> synsets;
+  private final Map<Integer, ArrayList<Integer>> hypernyms;
+  private final Map<String, ArrayList<Integer>> nouns;
 
   public WordNet(String synsets, String hypernyms) {
     if (synsets == null || hypernyms == null) {
       throw new IllegalArgumentException();
     }
+    this.synsets = new HashMap<>();
+    this.hypernyms = new HashMap<>();
+    nouns = new HashMap<>();
     readSynets(synsets);
     readHypernyms(hypernyms);
-    digraph = new Digraph(this.hypernyms.size());
+    Digraph digraph = new Digraph(this.hypernyms.size());
     for (Integer synsetId : this.hypernyms.keySet()) {
       for (Integer hypernym : this.hypernyms.get(synsetId)) {
         digraph.addEdge(synsetId, hypernym);
       }
     }
+    sap = new SAP(digraph);
   }
 
   public Iterable<String> nouns() {
@@ -30,10 +34,18 @@ public class WordNet {
   }
 
   public int distance(String nounA, String nounB) {
-    if (!isNoun(nounA) || !isNoun(nounB)) {
+    if (!(isNoun(nounA) && isNoun(nounB))) {
       throw new IllegalArgumentException();
     }
-    return 0;
+    return sap.length(nouns.get(nounA), nouns.get(nounB));
+  }
+
+  public String sap(String nounA, String nounB) {
+    if (!(isNoun(nounA) && isNoun(nounB))) {
+      throw new IllegalArgumentException();
+    }
+    int ancestor = sap.ancestor(nouns.get(nounA), nouns.get(nounB));
+    return synsets.get(ancestor);
   }
 
   public boolean isNoun(String word) {
@@ -49,23 +61,21 @@ public class WordNet {
 
   private void readSynets(String synsetsFileName) {
     In in = new In(synsetsFileName);
-    synsets = new HashMap<>();
-    nouns = new HashMap<>();
     for (String line : in.readAllLines()) {
       String[] lineElements = line.split(",");
       int synsetId = Integer.parseInt(lineElements[0]);
-      ArrayList<String> nounList = new ArrayList<>();
       for (String noun : lineElements[1].split(" ")) {
-        nounList.add(noun);
-        nouns.put(noun, synsetId);
+        if (!nouns.containsKey(noun)) {
+          nouns.put(noun, new ArrayList<>());
+        }
+        nouns.get(noun).add(synsetId);
       }
-      synsets.put(synsetId, nounList);
+      synsets.put(synsetId, lineElements[1]);
     }
   }
 
   private void readHypernyms(String hypernymsFileName) {
     In in = new In(hypernymsFileName);
-    hypernyms = new HashMap<>();
     for (String line : in.readAllLines()) {
       String[] lineElements = line.split(",");
       int synsetId = Integer.parseInt(lineElements[0]);
